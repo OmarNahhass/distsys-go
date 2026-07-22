@@ -113,7 +113,51 @@ func (r *Ring) GetNode(key string) (string, error) {
 	return r.hashToNode[r.hashes[idx]], nil
 }
 
+// GetNodes returns up to n distinct physical nodes responsible for replicating
+// a key: start at the key's clockwise-nearest node (same rule as GetNode),
+// then keep walking clockwise, collecting further *distinct* physical nodes,
+// until n have been found or the whole ring has been walked.
+//
+// This is what makes replication possible: instead of one node owning a key
+// outright, we get an ordered list of N nodes that should each hold a copy.
+func (r *Ring) GetNodes(key string, n int) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(r.hashes) == 0 {
+		return nil, fmt.Errorf("ring is empty: no nodes have been added")
+	}
+
+	h := hashKey(key)
+	idx := sort.Search(len(r.hashes), func(i int) bool {
+		return r.hashes[i] >= h
+	})
+	if idx == len(r.hashes) {
+		idx = 0
+	}
+
+	seen := make(map[string]bool)
+	result := make([]string, 0, n)
+
+	for i := 0; i < len(r.hashes) && len(result) < n; i++ {
+		pos := (idx + i) % len(r.hashes)
+		node := r.hashToNode[r.hashes[pos]]
+		if seen[node] {
+			continue // same physical node, different virtual point - skip
+		}
+		seen[node] = true
+		result = append(result, node)
+	}
+
+	if len(result) < n {
+		return result, fmt.Errorf("only %d distinct physical nodes available, requested %d", len(result), n)
+	}
+
+	return result, nil
+}
+
 // Nodes returns the current set of physical nodes in the ring.
+
 func (r *Ring) Nodes() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
