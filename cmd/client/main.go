@@ -30,8 +30,6 @@ func main() {
 	}
 	fmt.Printf("Add response: %d\n", addReply.Sum)
 
-	// Deliberately call a method that doesn't exist, to see error handling
-	// flow all the way back through the RPC layer as a real Go error.
 	var junk struct{}
 	if err := client.Call("DoesNotExist", nil, &junk); err != nil {
 		fmt.Printf("Expected error calling unknown method: %v\n", err)

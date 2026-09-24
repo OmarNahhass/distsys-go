@@ -1,5 +1,3 @@
-// Package kvnode wires a store.Store into an rpc.Server, exposing "Put" and
-// "Get" as callable RPC methods.
 package kvnode
 
 import (
@@ -13,7 +11,7 @@ import (
 type PutArgs struct {
 	Key   string       `json:"key"`
 	Data  string       `json:"data"`
-	Clock vclock.Clock `json:"clock,omitempty"` // caller's last-known clock for this key, if any
+	Clock vclock.Clock `json:"clock,omitempty"`
 }
 
 type PutReply struct {
@@ -40,8 +38,6 @@ type GetReply struct {
 	Clock vclock.Clock `json:"clock"`
 }
 
-// Register binds "Put", "Replicate", and "Get" RPC methods on server to the
-// given store.
 func Register(server *rpc.Server, s *store.Store) {
 	server.Register("Put", func(raw json.RawMessage) (interface{}, error) {
 		var args PutArgs

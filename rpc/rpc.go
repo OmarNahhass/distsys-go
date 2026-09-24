@@ -1,9 +1,3 @@
-// Package rpc implements a minimal request/response RPC system over raw TCP.
-//
-// This exists to make the RPC illusion concrete: a "remote call" is really
-// just serialize -> send bytes -> deserialize -> run function -> serialize
-// result -> send bytes back -> deserialize. Every later abstraction we use
-// (net/rpc, gRPC, Raft's RPCs) is doing exactly this under the hood.
 package rpc
 
 import (
@@ -14,16 +8,6 @@ import (
 	"net"
 	"sync"
 )
-
-// --- Message framing ---------------------------------------------------
-//
-// TCP is just a stream of bytes with no concept of "message boundaries."
-// If we write two JSON messages back to back, the reader might see them
-// concatenated, or split in the middle, depending entirely on timing.
-//
-// The fix: prefix every message with its length (4 bytes, big-endian).
-// The reader always knows exactly how many bytes to read for "this message",
-// no matter how the underlying TCP stream happened to chop up the bytes.
 
 func writeFrame(w io.Writer, payload []byte) error {
 	lenBuf := make([]byte, 4)
@@ -40,7 +24,7 @@ func writeFrame(w io.Writer, payload []byte) error {
 func readFrame(r io.Reader) ([]byte, error) {
 	lenBuf := make([]byte, 4)
 	if _, err := io.ReadFull(r, lenBuf); err != nil {
-		return nil, err // includes io.EOF when the connection closes cleanly
+		return nil, err
 	}
 	size := binary.BigEndian.Uint32(lenBuf)
 	payload := make([]byte, size)
@@ -50,28 +34,16 @@ func readFrame(r io.Reader) ([]byte, error) {
 	return payload, nil
 }
 
-// --- Wire format ---------------------------------------------------------
-
-// request is what goes out on the wire for every call.
-// Args stays as raw JSON so the RPC layer itself never needs to know
-// the concrete argument types of any given method - handlers decode
-// their own args.
 type request struct {
 	Method string          `json:"method"`
 	Args   json.RawMessage `json:"args"`
 }
 
-// response is what comes back on the wire for every call.
 type response struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
 }
 
-// --- Server ----------------------------------------------------------------
-
-// HandlerFunc is the shape every registered RPC method must have.
-// It receives raw args (still-encoded JSON) and returns a result to encode,
-// or an error.
 type HandlerFunc func(args json.RawMessage) (interface{}, error)
 
 type Server struct {
@@ -83,16 +55,12 @@ func NewServer() *Server {
 	return &Server{handlers: make(map[string]HandlerFunc)}
 }
 
-// Register binds a method name (e.g. "KV.Get") to a handler function.
 func (s *Server) Register(method string, h HandlerFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers[method] = h
 }
 
-// Serve accepts connections on the listener forever, handling each on its
-// own goroutine - this is where Go's concurrency model earns its keep:
-// one goroutine per connection, no manual thread pool needed.
 func (s *Server) Serve(l net.Listener) error {
 	for {
 		conn, err := l.Accept()
@@ -108,7 +76,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	for {
 		payload, err := readFrame(conn)
 		if err != nil {
-			return // client disconnected, or a real error - either way, done
+			return
 		}
 
 		var req request
@@ -150,10 +118,8 @@ func (s *Server) sendError(conn net.Conn, msg string) {
 	writeFrame(conn, respBytes)
 }
 
-// --- Client ----------------------------------------------------------------
-
 type Client struct {
-	mu   sync.Mutex // one call at a time per connection, kept deliberately simple for now
+	mu   sync.Mutex
 	conn net.Conn
 }
 
@@ -169,9 +135,6 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-// Call sends a request and blocks until the response arrives (or an error
-// occurs). reply must be a pointer - the decoded result gets written into it,
-// same pattern as json.Unmarshal.
 func (c *Client) Call(method string, args interface{}, reply interface{}) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

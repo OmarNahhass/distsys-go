@@ -9,9 +9,6 @@ import (
 	"distsys/rpc"
 )
 
-// EchoArgs / AddArgs are the concrete types each handler expects.
-// The RPC layer itself never knows about these - it just passes along
-// raw JSON and lets each handler decode its own shape.
 type EchoArgs struct {
 	Message string `json:"message"`
 }
