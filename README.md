@@ -1,6 +1,6 @@
 # distsys-go
 
-A distributed key-value store built from scratch in Go, based off Amazon's Dynamo design.
+A distributed key-value store built in Go, based off Amazon's Dynamo design.
 
 **GitHub:** https://github.com/OmarNahhass/distsys-go
 
